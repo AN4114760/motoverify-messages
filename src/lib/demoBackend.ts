@@ -1,21 +1,26 @@
-import type { Backend, Conversation, ConvoTag, Me, Message, Peer } from './types';
+import type { Backend, Conversation, ConvoTag, Listing, Me, Message, NewListing } from './types';
 
 /**
  * 沒有設定 Supabase 環境變數時使用的假後端。
- * 資料存在記憶體,重整就沒了 — 它的用途只是讓部署好的網址一打開就有東西可看,
- * 以及讓你在還沒建 Supabase 專案前就能確認 UI。
+ * 資料存在記憶體,重整就沒了 — 用途是讓部署好的網址一打開就有東西可看。
  */
 
 const now = Date.now();
 const iso = (minsAgo: number) => new Date(now - minsAgo * 60_000).toISOString();
 
-const ME: Me = { id: 'demo-me', name: '小魚', email: 'demo@motoverify.test' };
+const ME: Me = { id: 'demo-me', name: '小魚', email: 'demo@motoverify.test', userCode: 'K7M2QX' };
 
-const PEERS: Peer[] = [
+const SELLERS = [
   { id: 'demo-kai', name: '阿凱' },
-  { id: 'demo-ivy', name: '買家 Ivy' },
   { id: 'demo-chang', name: '車行老張' },
   { id: 'demo-rider', name: 'Rider_TW' },
+];
+
+const listings: Listing[] = [
+  { id: 'l1', sellerId: 'demo-kai', sellerName: '阿凱', title: '2020 山葉 勁戰六代', price: 78000, year: 2020, mileage: 12400, location: '台北市 中正區', accent: '#3360E4', isMine: false },
+  { id: 'l2', sellerId: 'demo-chang', sellerName: '車行老張', title: '2019 光陽 雷霆S 125', price: 52000, year: 2019, mileage: 23800, location: '新北市 板橋區', accent: '#1FA463', isMine: false },
+  { id: 'l3', sellerId: 'demo-rider', sellerName: 'Rider_TW', title: '2022 Gogoro VIVA MIX', price: 61000, year: 2022, mileage: 8100, location: '台北市 大安區', accent: '#E8912C', isMine: false },
+  { id: 'l4', sellerId: ME.id, sellerName: ME.name, title: '2018 三陽 DRG 158', price: 66000, year: 2018, mileage: 31500, location: '桃園市 中壢區', accent: '#E5484D', isMine: true },
 ];
 
 interface DemoConvo {
@@ -24,27 +29,23 @@ interface DemoConvo {
   peerId: string;
   peerName: string;
   lastReadAt: string;
+  listingTitle: string | null;
 }
 
 const convos: DemoConvo[] = [
-  { id: 'c1', tag: '交易中', peerId: 'demo-kai', peerName: '阿凱', lastReadAt: iso(400) },
-  { id: 'c2', tag: '買家詢問', peerId: 'demo-ivy', peerName: '買家 Ivy', lastReadAt: iso(400) },
-  { id: 'c3', tag: '交易中', peerId: 'demo-chang', peerName: '車行老張', lastReadAt: iso(1) },
-  { id: 'c4', tag: '一般', peerId: 'demo-rider', peerName: 'Rider_TW', lastReadAt: iso(1) },
+  { id: 'c1', tag: '買家詢問', peerId: 'demo-kai', peerName: '阿凱', lastReadAt: iso(400), listingTitle: '2020 山葉 勁戰六代' },
+  { id: 'c2', tag: '一般', peerId: 'demo-rider', peerName: 'Rider_TW', lastReadAt: iso(1), listingTitle: null },
 ];
 
 let seq = 0;
 const mkId = () => `m${++seq}`;
 
 const messages: Message[] = [
-  { id: mkId(), conversationId: 'c1', senderId: 'demo-kai', content: '你好,這台還在嗎?', createdAt: iso(70) },
-  { id: mkId(), conversationId: 'c1', senderId: ME.id, content: '你好!還在喔!', createdAt: iso(69) },
-  { id: mkId(), conversationId: 'c1', senderId: 'demo-kai', content: '可以的話明天看車嗎?', createdAt: iso(68) },
-  { id: mkId(), conversationId: 'c1', senderId: ME.id, content: '可以啊,下午三點方便嗎?', createdAt: iso(67) },
-  { id: mkId(), conversationId: 'c1', senderId: 'demo-kai', content: '好,那就明天下午三點!', createdAt: iso(12) },
-  { id: mkId(), conversationId: 'c2', senderId: 'demo-ivy', content: '請問最低可以多少呢?', createdAt: iso(56) },
-  { id: mkId(), conversationId: 'c3', senderId: 'demo-chang', content: '謝謝你的購買,我們明天交車', createdAt: iso(150) },
-  { id: mkId(), conversationId: 'c4', senderId: 'demo-rider', content: '推薦一下新手入門車款喔!', createdAt: iso(1400) },
+  { id: mkId(), conversationId: 'c1', senderId: ME.id, content: '你好,這台還在嗎?', createdAt: iso(70) },
+  { id: mkId(), conversationId: 'c1', senderId: 'demo-kai', content: '還在喔!有興趣可以約看車', createdAt: iso(69) },
+  { id: mkId(), conversationId: 'c1', senderId: ME.id, content: '明天下午三點方便嗎?', createdAt: iso(68) },
+  { id: mkId(), conversationId: 'c1', senderId: 'demo-kai', content: '可以,那就明天下午三點', createdAt: iso(12) },
+  { id: mkId(), conversationId: 'c2', senderId: 'demo-rider', content: '推薦一下新手入門車款喔!', createdAt: iso(1400) },
 ];
 
 const REPLIES = ['好的,收到!', '我再確認一下時間', '沒問題,那就這樣說定', '方便的話可以傳張照片嗎?'];
@@ -63,6 +64,14 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function createDemoBackend(): Backend {
   let signedIn = false; // 展示模式也走一次登入流程,任意信箱密碼都會通過
   const authListeners = new Set<(me: Me | null) => void>();
+
+  function openWith(peerId: string, peerName: string, listingTitle: string | null, tag: ConvoTag) {
+    const found = convos.find((c) => c.peerId === peerId && c.listingTitle === listingTitle);
+    if (found) return found.id;
+    const id = `c-${Date.now()}`;
+    convos.push({ id, tag, peerId, peerName, lastReadAt: new Date().toISOString(), listingTitle });
+    return id;
+  }
 
   return {
     isDemo: true,
@@ -102,22 +111,51 @@ export function createDemoBackend(): Backend {
             lastMessage: last?.content ?? '還沒有訊息',
             updatedAt: last?.createdAt ?? iso(9999),
             unread: mine.filter((m) => m.senderId !== ME.id && m.createdAt > c.lastReadAt).length,
+            listingTitle: c.listingTitle,
           };
         })
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
 
-    async listPeers() {
-      return PEERS.filter((p) => !convos.some((c) => c.peerId === p.id));
+    async listListings() {
+      await wait(100);
+      return listings;
     },
 
-    async startConversation(peerId, tag) {
-      const existing = convos.find((c) => c.peerId === peerId);
-      if (existing) return existing.id;
-      const peer = PEERS.find((p) => p.id === peerId);
-      const id = `c${convos.length + 1}-${Date.now()}`;
-      convos.push({ id, tag, peerId, peerName: peer?.name ?? '新對象', lastReadAt: new Date().toISOString() });
-      return id;
+    async createListing(input: NewListing) {
+      listings.unshift({
+        id: `l-${Date.now()}`,
+        sellerId: ME.id,
+        sellerName: ME.name,
+        title: input.title,
+        price: input.price,
+        year: input.year,
+        mileage: input.mileage,
+        location: input.location,
+        accent: '#7A5AF0',
+        isMine: true,
+      });
+    },
+
+    async deleteListing(id) {
+      const i = listings.findIndex((l) => l.id === id);
+      if (i >= 0) listings.splice(i, 1);
+    },
+
+    async startFromListing(listingId) {
+      const l = listings.find((x) => x.id === listingId);
+      if (!l) throw new Error('找不到這則刊登');
+      if (l.isMine) throw new Error('這是你自己的刊登');
+      return openWith(l.sellerId, l.sellerName, l.title, '買家詢問');
+    },
+
+    async startByHandle(handle) {
+      const h = handle.trim().toUpperCase();
+      if (!h) throw new Error('請輸入代碼或信箱');
+      if (h === ME.userCode) throw new Error('不能和自己開對話');
+      // 展示模式:任何代碼都對到第一個假賣家
+      const peer = SELLERS[0];
+      return openWith(peer.id, peer.name, null, '一般');
     },
 
     async listMessages(conversationId) {
@@ -137,7 +175,6 @@ export function createDemoBackend(): Backend {
       messages.push(msg);
       inboxListeners.forEach((cb) => cb());
 
-      // 模擬對方回覆,讓 realtime 的路徑在 demo 模式下也看得出來
       const convo = convos.find((c) => c.id === conversationId);
       if (convo) {
         setTimeout(() => {

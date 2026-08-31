@@ -4,11 +4,21 @@ export interface Me {
   id: string;
   name: string;
   email: string;
+  /** 給別人加你用的短代碼,像 LINE ID */
+  userCode: string;
 }
 
-export interface Peer {
+export interface Listing {
   id: string;
-  name: string;
+  sellerId: string;
+  sellerName: string;
+  title: string;
+  price: number;
+  year: number | null;
+  mileage: number | null;
+  location: string;
+  accent: string;
+  isMine: boolean;
 }
 
 export interface Conversation {
@@ -19,6 +29,8 @@ export interface Conversation {
   lastMessage: string;
   updatedAt: string;
   unread: number;
+  /** 這個對話是從哪則刊登開始的,沒有就是直接聯絡 */
+  listingTitle: string | null;
 }
 
 export interface Message {
@@ -27,9 +39,16 @@ export interface Message {
   senderId: string;
   content: string;
   createdAt: string;
-  /** 樂觀更新用:訊息還沒被伺服器確認 */
   pending?: boolean;
   failed?: boolean;
+}
+
+export interface NewListing {
+  title: string;
+  price: number;
+  year: number | null;
+  mileage: number | null;
+  location: string;
 }
 
 /** 訊息模組需要的所有後端操作。Supabase 與 demo 兩種實作共用這個介面。 */
@@ -42,15 +61,19 @@ export interface Backend {
   signOut(): Promise<void>;
 
   listConversations(): Promise<Conversation[]>;
-  listPeers(): Promise<Peer[]>;
-  startConversation(peerId: string, tag: ConvoTag): Promise<string>;
+  listListings(): Promise<Listing[]>;
+  createListing(input: NewListing): Promise<void>;
+  deleteListing(id: string): Promise<void>;
+
+  /** 從車輛刊登聯絡賣家 */
+  startFromListing(listingId: string): Promise<string>;
+  /** 用使用者代碼或信箱直接聯絡 */
+  startByHandle(handle: string): Promise<string>;
 
   listMessages(conversationId: string): Promise<Message[]>;
   sendMessage(conversationId: string, content: string): Promise<Message>;
   markRead(conversationId: string): Promise<void>;
 
-  /** 訂閱單一對話的新訊息 */
   subscribeToConversation(conversationId: string, cb: (m: Message) => void): () => void;
-  /** 訂閱所有對話的變動(用來更新列表與未讀角標) */
   subscribeToInbox(cb: () => void): () => void;
 }

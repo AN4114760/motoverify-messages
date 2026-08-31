@@ -45,3 +45,13 @@ export const IconBike = () => (
     <path d="M9 9 8 6h4l1 3" />
   </svg>
 );
+
+export const IconMarket = ({ size = 21 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" strokeWidth="1.9" {...s}>
+    <circle cx="6.5" cy="17" r="2.2" />
+    <circle cx="17.5" cy="17" r="2.2" />
+    <path d="M4 17h.6L8 9h6l3 5" />
+    <path d="M8 9 6.6 6H4" />
+    <path d="M11.2 9 13 12.5h4.5" />
+  </svg>
+);

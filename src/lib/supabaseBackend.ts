@@ -1,18 +1,11 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
-import type { Backend, Conversation, ConvoTag, Me, Message, Peer } from './types';
+import type { Backend, Conversation, ConvoTag, Listing, Me, Message, NewListing } from './types';
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-export const hasSupabaseConfig = Boolean(URL && KEY && URL.startsWith('http'));
-
-function toMe(user: User): Me {
-  return {
-    id: user.id,
-    name: (user.user_metadata?.display_name as string) || user.email?.split('@')[0] || '騎士',
-    email: user.email ?? '',
-  };
-}
+export const hasSupabaseConfig =
+  Boolean(URL && KEY && URL.startsWith('http')) && !URL!.includes('xxxxx');
 
 export function createSupabaseBackend(): Backend {
   const sb: SupabaseClient = createClient(URL!, KEY!);
@@ -21,6 +14,21 @@ export function createSupabaseBackend(): Backend {
     const { data } = await sb.auth.getUser();
     if (!data.user) throw new Error('尚未登入');
     return data.user.id;
+  }
+
+  // user_code 存在 profiles,登入資訊裡沒有,要另外撈
+  async function toMe(user: User): Promise<Me> {
+    const { data } = await sb
+      .from('profiles')
+      .select('display_name, user_code')
+      .eq('id', user.id)
+      .maybeSingle();
+    return {
+      id: user.id,
+      name: data?.display_name || user.email?.split('@')[0] || '騎士',
+      email: user.email ?? '',
+      userCode: data?.user_code ?? '——',
+    };
   }
 
   return {
@@ -33,7 +41,11 @@ export function createSupabaseBackend(): Backend {
 
     onAuthChange(cb) {
       const { data } = sb.auth.onAuthStateChange((_e, session) => {
-        cb(session ? toMe(session.user) : null);
+        if (!session) {
+          cb(null);
+          return;
+        }
+        void toMe(session.user).then(cb);
       });
       return () => data.subscription.unsubscribe();
     },
@@ -50,7 +62,6 @@ export function createSupabaseBackend(): Backend {
         options: { data: { display_name: name } },
       });
       if (error) throw new Error(translate(error.message));
-      // 專案若開啟 email 驗證,session 會是 null
       return { needsConfirm: !data.session };
     },
 
@@ -76,25 +87,56 @@ export function createSupabaseBackend(): Backend {
           lastMessage: r.last_message ?? '還沒有訊息',
           updatedAt: r.updated_at,
           unread: Number(r.unread_count ?? 0),
+          listingTitle: r.listing_title ?? null,
         }),
       );
     },
 
-    async listPeers() {
+    async listListings() {
       const uid = await requireUid();
       const { data, error } = await sb
-        .from('profiles')
-        .select('id, display_name')
-        .neq('id', uid)
+        .from('listings')
+        .select('*, profiles!listings_seller_id_fkey(display_name)')
         .order('created_at', { ascending: false })
         .limit(50);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((p): Peer => ({ id: p.id, name: p.display_name }));
+
+      return (data ?? []).map(
+        (r): Listing => ({
+          id: r.id,
+          sellerId: r.seller_id,
+          sellerName: r.profiles?.display_name ?? '賣家',
+          title: r.title,
+          price: r.price,
+          year: r.year,
+          mileage: r.mileage,
+          location: r.location,
+          accent: r.accent,
+          isMine: r.seller_id === uid,
+        }),
+      );
     },
 
-    async startConversation(peerId, tag) {
-      const { data, error } = await sb.rpc('start_conversation', { peer: peerId, tag });
+    async createListing(input: NewListing) {
+      const uid = await requireUid();
+      const { error } = await sb.from('listings').insert({ ...input, seller_id: uid });
       if (error) throw new Error(error.message);
+    },
+
+    async deleteListing(id) {
+      const { error } = await sb.from('listings').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+
+    async startFromListing(listingId) {
+      const { data, error } = await sb.rpc('start_conversation_from_listing', { listing: listingId });
+      if (error) throw new Error(translate(error.message));
+      return data as string;
+    },
+
+    async startByHandle(handle) {
+      const { data, error } = await sb.rpc('start_conversation_by_handle', { handle });
+      if (error) throw new Error(translate(error.message));
       return data as string;
     },
 
@@ -149,7 +191,6 @@ export function createSupabaseBackend(): Backend {
     },
 
     subscribeToInbox(cb) {
-      // RLS 會過濾掉不屬於自己的對話,所以這裡收到的都是有權看的訊息
       const channel = sb
         .channel('inbox')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => cb())
@@ -176,5 +217,6 @@ function translate(msg: string): string {
   if (/User already registered/i.test(msg)) return '這個信箱已經註冊過了,直接登入吧';
   if (/Password should be at least/i.test(msg)) return '密碼至少要 6 個字元';
   if (/Email address .* is invalid/i.test(msg)) return '信箱格式不正確';
+  // RPC 裡 raise exception 的中文訊息會原樣帶出來
   return msg;
 }

@@ -98,7 +98,12 @@ export function ChatScreen({ me, conversation, onBack, onChanged }: Props) {
             <button className="icon-btn ghost" onClick={onBack} aria-label="返回">
               <IconBack />
             </button>
-            <span className="title">{conversation.peerName}</span>
+            <div className="back-titles">
+              <span className="title">{conversation.peerName}</span>
+              {conversation.listingTitle && (
+                <span className="subtitle">關於 {conversation.listingTitle}</span>
+              )}
+            </div>
           </div>
           <span className="convo-tag">{conversation.tag}</span>
         </div>
